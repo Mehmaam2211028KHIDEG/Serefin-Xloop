@@ -6,7 +6,7 @@ Code repository for the Serefin Project.
 1. **Install Dependencies**  
    Run the following command to install all required packages from `requirements.txt`:
    ```bash
-   pip install -r requirements.txt
+   pip3 install -r requirements.txt
 2. **Run Script**
    Run the following command to run script from `app.py`:
    ```bash
