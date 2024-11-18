@@ -1,79 +1,87 @@
-
 import logging
 import os
 import whisper
 from pydub import AudioSegment
 
-# Initialize logging
-logging.basicConfig(filename='app.log', level=logging.DEBUG, filemode='a', 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Setup logging
+def setup_logging():
+    logging.basicConfig(filename='app.log', level=logging.DEBUG, filemode='a', 
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+    return logging.getLogger(__name__)
 
-# Load the model once to avoid reloading it for every file
-model = whisper.load_model("turbo")  # Adjust to "turbo" or other as needed for better performance
+logger = setup_logging()
+
+# Load the model once to optimize performance
+model = whisper.load_model("turbo")
 
 def check_files_in_directory(base_path):
     """Check for .webm files in the directory and process them."""
-    logging.warning("=============Starting Directory Check=================")
+    logger.warning("Starting Directory Check")
+    processed_files = set()
     for root, _, files in os.walk(base_path):
-        logger.debug(f"Checking folder: {root}")
         for file_name in files:
             if file_name.endswith('.webm'):
-                logger.debug(".webm file found")
-                file_path = os.path.join(root, file_name)
-                process_file(file_name, file_path)
+                process_file(file_name, os.path.join(root, file_name), processed_files)
 
-def process_file(file_name, file_path):
+def process_file(file_name, file_path, processed_files):
     """Process each .webm file: convert to .wav, transcribe, and save output."""
-    logging.warning("=============Starting File Processing=================")
+    logger.warning("Starting File Processing")
     try:
-        txt_filename = os.path.splitext(file_name)[0] + ".txt"
-        logger.debug(f"Processing file: {file_path}")
-        
-        # Convert .webm to .wav
+        txt_filename = create_unique_filename(file_name)
         wav_file = webm_to_wav(file_path)
-        
-        # Transcribe audio to text
         whisper_text = transcribe_audio(wav_file)
-        
-        # Write transcribed text to a file
         if whisper_text:
-            with open(txt_filename, 'w') as file:
-                file.write(whisper_text)
-            logging.info(f"Transcription saved to {txt_filename}")
-        
-        # Clean up files after processing
-        os.remove(file_path)
-        os.remove(wav_file)
-        logger.info(f"Cleaned up files: {file_path} and {wav_file}")
-
+            save_transcription(whisper_text, txt_filename)
+        cleanup_files(file_path, wav_file)
+        processed_files.add(file_name)
     except Exception as e:
         logger.critical(f"Error processing file {file_path}: {e}")
 
-def transcribe_audio(file_path):
-    """Transcribe audio using Whisper model."""
-    logging.warning("=============Starting Transcription=================")
-    if os.path.exists(file_path):
-        result = model.transcribe(file_path)
-        logging.info("Transcription successful")
-        return result['text']
-    else:
-        logger.error("WAV file for transcription not found.")
-        return ""
+def create_unique_filename(file_name):
+    """Generate a unique filename for the transcription text file."""
+    base_txt_filename = os.path.splitext(file_name)[0]
+    txt_filename = f"{base_txt_filename}.txt"
+    counter = 1
+    while os.path.exists(txt_filename):
+        txt_filename = f"{base_txt_filename}_{counter}.txt"
+        counter += 1
+    return txt_filename
 
 def webm_to_wav(file_path):
     """Convert .webm file to .wav format."""
-    logging.warning(f"Converting {file_path} to WAV format")
+    logger.warning(f"Converting {file_path} to WAV format")
     try:
         audio = AudioSegment.from_file(file_path, format="webm")
         wav_file_path = file_path.replace(".webm", ".wav")
         audio.export(wav_file_path, format="wav")
-        logging.info(f"Conversion to WAV complete: {wav_file_path}")
+        logger.info(f"Conversion to WAV complete: {wav_file_path}")
         return wav_file_path
     except Exception as e:
         logger.error(f"Error converting {file_path} to WAV: {e}")
         raise
 
-# Specify the base path to check for files
-base_path = '''Add Folder Path here'''
+def transcribe_audio(file_path):
+    """Transcribe audio using Whisper model."""
+    logger.warning("Starting Transcription")
+    if os.path.exists(file_path):
+        result = model.transcribe(file_path)
+        logger.info("Transcription successful")
+        return result['text']
+    else:
+        logger.error("WAV file for transcription not found.")
+        return ""
+
+def save_transcription(text, filename):
+    """Save the transcription text to a file."""
+    with open(filename, 'w') as file:
+        file.write(text)
+    logger.info(f"Transcription saved to {filename}")
+
+def cleanup_files(*files):
+    """Remove processed files after use."""
+    for file in files:
+        os.remove(file)
+        logger.info(f"File deleted: {file}")
+
+base_path = '''Add File Path'''
 check_files_in_directory(base_path)
