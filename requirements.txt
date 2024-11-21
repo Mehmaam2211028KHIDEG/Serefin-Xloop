@@ -1,2 +1,10 @@
-openai_whisper==20240930
-pydub==0.25.1
+torch>=2.0.0
+transformers>=4.37.0
+pydub>=0.25.1
+# flash-attn>=2.0.0
+
+# Development tools
+black==24.2.0
+flake8==7.0.0
+pylint==2.17.7
+isort==5.13.2

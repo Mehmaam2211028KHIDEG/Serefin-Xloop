@@ -1,0 +1,50 @@
+[MASTER]
+# Python code to execute, usually for sys.path manipulation such as pygtk.require().
+init-hook='import sys; sys.path.append(".")'
+
+# Files or directories to be skipped. They should be base names, not paths.
+ignore=CVS,.git,__pycache__
+
+# Add any Python module names here where you want to disable all warnings.
+disable=
+    C0111, # missing-docstring
+    C0103, # invalid-name
+    W0621, # redefined-outer-name
+    R0903, # too-few-public-methods
+    R0913, # too-many-arguments
+    R0914, # too-many-locals
+    C0114, # missing-module-docstring
+    C0115, # missing-class-docstring
+    C0116,   # missing-function-docstring
+    W1203, # logging-fstring-interpolation
+    W0718  # broad-exception-caught
+
+[FORMAT]
+# Maximum number of characters on a single line.
+max-line-length=88
+
+# Maximum number of lines in a module.
+max-module-lines=1000
+
+# String used as indentation unit. This is usually "    " (4 spaces) or "\t" (1 tab).
+indent-string='    '
+
+[REPORTS]
+# Set the output format. Available formats are text, parseable, colorized, html
+output-format=colorized
+
+# Include a brief explanation of each error when errors are displayed.
+msg-template={path}:{line}: [{msg_id}({symbol}), {obj}] {msg}
+
+[BASIC]
+# Regular expression which should only match function or class names that do not
+# require a docstring.
+no-docstring-rgx=^_
+
+# Minimum line length for functions/classes that require docstrings, shorter ones
+# are exempt.
+docstring-min-length=10
+
+[MISCELLANEOUS]
+# List of note tags to take into consideration, separated by a comma.
+notes=FIXME,XXX,TODO 

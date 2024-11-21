@@ -1,13 +1,49 @@
 # Serefin-Xloop
 Code repository for the Serefin Project.
 
+### Prerequisites
+- Python 3.8 or higher
+- Make (optional)
+
 ### Instructions
 
-1. **Install Dependencies**  
-   Run the following command to install all required packages from `requirements.txt`:
+1. **Create Virtual Environment** (recommended)
    ```bash
-   pip3 install -r requirements.txt
-2. **Run Script**  
-   Run the following command to run script from `app.py`:
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+2. **Install Dependencies**
    ```bash
-   pyhton3 app.py
+   pip install -r requirements.txt
+   # Or using make:
+   make install
+   ```
+
+3. **Run Script**
+   ```bash
+   python src/app.py
+   # Or using make:
+   make run
+   ```
+
+4. **Development Tools** (optional)
+   Install development dependencies:
+   ```bash
+   pip install black flake8 pylint isort
+   ```
+
+   Format code:
+   ```bash
+   make format
+   ```
+
+   Run linting:
+   ```bash
+   make lint
+   ```
+
+5. **Clean Project**
+   ```bash
+   make clean
+   ```
