@@ -18,10 +18,14 @@ class AudioTranscriber:
     def _setup_logging(self) -> logging.Logger:
         """Setup detailed logging configuration."""
         logger = logging.getLogger(__name__)
-        logger.setLevel(logging.DEBUG)  # Set to DEBUG to capture all levels of log messages
+        logger.setLevel(
+            logging.DEBUG
+        )  # Set to DEBUG to capture all levels of log messages
         if not logger.handlers:
-            fh = logging.FileHandler('logs/transcription.log')
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            fh = logging.FileHandler("logs/transcription.log")
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
             fh.setFormatter(formatter)
             logger.addHandler(fh)
         return logger
@@ -104,7 +108,7 @@ class AudioTranscriber:
             output_path = output_dir / f"{audio_path.stem}.txt"
             self.logger.info(f"Saving transcription to {output_path}")
             output_path.write_text(text)
-            
+
             # Uncomment the following lines to enable deletion of the original .webm file after transcription
             # if audio_path.exists():
             #     audio_path.unlink()
