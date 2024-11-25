@@ -107,7 +107,7 @@ class AudioTranscriber:
     def _save_transcription(self, audio_path: Path, text: str) -> None:
         """Save transcription to file in a separate directory outside of src."""
         try:
-            output_dir = Path("/home/mehmaam/Desktop/serefin_bot/Serefin-Xloop-main/transcriptions")
+            output_dir = Path("transcriptions_directory_path")
             output_dir.mkdir(parents=True, exist_ok=True)
             output_path = output_dir / f"{audio_path.stem}.txt"
             self.logger.info(f"Saving transcription to {output_path}")
