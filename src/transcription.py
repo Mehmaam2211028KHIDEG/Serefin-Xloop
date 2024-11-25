@@ -16,15 +16,14 @@ class AudioTranscriber:
         self.model = self._initialize_model()
 
     def _setup_logging(self) -> logging.Logger:
+        """Setup detailed logging configuration."""
         logger = logging.getLogger(__name__)
-        logger.setLevel(self.config.log_level)
+        logger.setLevel(logging.DEBUG)  # Set to DEBUG to capture all levels of log messages
         if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
+            fh = logging.FileHandler('logs/transcription.log')
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
         return logger
 
     def _initialize_model(self):
@@ -95,14 +94,21 @@ class AudioTranscriber:
                 result = self.transcribe_audio(file_path)
                 if result:
                     self._save_transcription(file_path, result)
+                    self.logger.info(f"Successfully processed: {file_path.name}")
 
     def _save_transcription(self, audio_path: Path, text: str) -> None:
-        """Save transcription to file."""
+        """Save transcription to file in a separate directory outside of src."""
         try:
-            output_dir = Path(self.config.output_dir)
-            output_dir.mkdir(exist_ok=True)
+            output_dir = Path("transcriptions_directory_path")
+            output_dir.mkdir(parents=True, exist_ok=True)
             output_path = output_dir / f"{audio_path.stem}.txt"
             self.logger.info(f"Saving transcription to {output_path}")
             output_path.write_text(text)
+            
+            # Uncomment the following lines to enable deletion of the original .webm file after transcription
+            # if audio_path.exists():
+            #     audio_path.unlink()
+            #     self.logger.info(f"Deleted original audio file: {audio_path}")
+
         except Exception as e:
             self.logger.error(f"Error saving transcription: {str(e)}")
