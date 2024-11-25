@@ -12,6 +12,6 @@ class TranscriptionConfig:
     batch_size: int = 16
     device: str = "cuda:0" if torch.cuda.is_available() else "cpu"
     torch_dtype: torch.dtype = torch.float16
-    supported_formats: tuple = ".webm"
+    supported_formats: tuple = (".webm",)
     output_dir: str = "transcriptions"
     log_level: str = "INFO"
