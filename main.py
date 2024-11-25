@@ -20,7 +20,7 @@ def main():
 
     try:
         # Configuration for both downloader and transcriber
-        local_dir = "/home/mehmaam/Desktop/serefin_bot/Serefin-Xloop-main/audio_files"  # Ensure this path is accessible and writable
+        local_dir = "local_directory_path/audio_files"  # Ensure this path is accessible and writable
         bucket_name = "your-s3-bucket-name"
 
         # Create custom config for transcriber
