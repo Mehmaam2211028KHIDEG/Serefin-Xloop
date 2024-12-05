@@ -15,3 +15,4 @@ class TranscriptionConfig:
     supported_formats: tuple = (".webm",)
     output_dir: str = "transcriptions"
     log_level: str = "INFO"
+

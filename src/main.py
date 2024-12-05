@@ -1,10 +1,8 @@
 import logging
-import time
+import sys
 from pathlib import Path
 
 from aws_bucket import S3ProcessingPipeline
-from transcription import AudioTranscriber
-
 
 def setup_logging():
     """Setup logging with directory creation"""
@@ -23,74 +21,46 @@ def setup_logging():
         logger.addHandler(fh)
     return logger
 
-
 def ensure_directories():
     """Ensure all required directories exist"""
     directories = ["output", "transcriptions", "logs"]
     for directory in directories:
-        Path(directory).mkdir(exist_ok=True)
-
-
-def process_files(
-    downloader: S3ProcessingPipeline,
-    transcriber: AudioTranscriber,
-    local_dir: str,
-    logger: logging.Logger,
-):
-    """Process files with download and transcription"""
-    while True:
-        try:
-            # Start download manager
-            download_thread = downloader.start_downloading(local_dir)
-
-            # Monitor the output directory for files
-            output_dir = Path(local_dir)
-            while True:
-                # Process any existing files
-                for file_path in output_dir.glob("*.webm"):
-                    logger.info(f"Processing file: {file_path}")
-
-                    # Attempt transcription
-                    result = transcriber.transcribe_audio(file_path)
-                    if result:
-                        # Save transcription
-                        transcriber._save_transcription(file_path, result)
-                        logger.info(f"Successfully transcribed: {file_path}")
-
-                        # Remove the original file
-                        file_path.unlink()
-                        logger.info(f"Removed processed file: {file_path}")
-                    else:
-                        logger.error(f"Failed to transcribe: {file_path}")
-
-                # Brief pause before next check
-                time.sleep(5)
-
-        except Exception as e:
-            logger.error(f"Error in processing loop: {str(e)}")
-            time.sleep(60)  # Wait before retrying
-
+        path = Path(directory).resolve()
+        path.mkdir(exist_ok=True)
 
 def main():
     logger = setup_logging()
-    logger.info("Starting the application")
-
+    logger.info("=== Application Starting ===")
+    
     try:
         # Ensure directories exist
+        logger.info("Creating required directories...")
         ensure_directories()
+        logger.info("Directories created successfully")
 
         # Configuration
-        bucket_name = "access-oap-prod-twilio-bucket"
         local_dir = "./output"
-
-        # Initialize and start pipeline
-        pipeline = S3ProcessingPipeline(bucket_name, download_dir=local_dir)
+        bucket_name = "access-oap-prod-twilio-bucket"
+        logger.info(f"Configuration - Bucket: {bucket_name}, Local dir: {local_dir}")
+        
+        # Initialize and start the pipeline
+        logger.info("Initializing S3 Processing Pipeline...")
+        pipeline = S3ProcessingPipeline(
+            bucket_name=bucket_name,
+            download_dir=local_dir,
+            max_concurrent=2
+        )
+        
+        # Start processing
+        logger.info("Starting pipeline processing...")
         pipeline.start_processing()
 
     except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
+        logger.error(f"Fatal error: {str(e)}", exc_info=True)
         raise
-
+    finally:
+        logger.info("=== Application shutdown complete ===")
 
 if __name__ == "__main__":
     main()
+
