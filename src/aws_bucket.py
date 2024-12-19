@@ -4,6 +4,7 @@ from pathlib import Path
 from queue import Queue
 from threading import Event
 from typing import Optional
+import time
 
 import boto3
 from botocore.exceptions import ClientError
@@ -19,6 +20,8 @@ class S3ProcessingPipeline:
         self.s3_client = boto3.client("s3")
         self.processing_queue = Queue()
         self.stop_event = Event()
+        self.active_downloads = 0  # Track number of active downloads
+        self.download_complete = Event()  # Signal when download is complete
 
         # Create directories
         self.download_dir.mkdir(exist_ok=True)
@@ -81,74 +84,44 @@ class S3ProcessingPipeline:
     def process_file(self, local_path: Path):
         """Process a single file through transcription"""
         try:
-            from config import TranscriptionConfig
-            from transcription import AudioTranscriber
-
             self.logger.info(f"Starting transcription for {local_path}")
-            config = TranscriptionConfig()
-            transcriber = AudioTranscriber(config)
-            result = transcriber.transcribe_audio(local_path)
-
-            if result:
-                transcriber._save_transcription(local_path, result)
-                self.logger.info(f"Successfully transcribed {local_path}")
-            else:
-                raise Exception("Transcription failed")
+            # Let the main process handle transcription
+            self.active_downloads -= 1  # Decrease active downloads count
+            return True
 
         except Exception as e:
-            self.error_logger.error(f"Error transcribing {local_path}: {str(e)}")
+            self.error_logger.error(f"Error processing {local_path}: {str(e)}")
+            self.active_downloads -= 1  # Ensure we decrease count even on error
             return False
 
-        finally:
-            # Clean up the file
-            try:
-                if local_path.exists():
-                    local_path.unlink()
-                    self.logger.info(f"Cleaned up {local_path}")
-            except Exception as e:
-                self.error_logger.error(f"Error cleaning up {local_path}: {str(e)}")
-
     def start_processing(self):
-        """Start the download pipeline with concurrent downloads"""
+        """Start the download pipeline with strictly controlled downloads"""
         try:
             if not self.verify_bucket_access():
                 self.error_logger.error("Failed to verify bucket access")
                 return
 
-            self.logger.info(
-                f"Starting download process for bucket: {self.bucket_name}"
-            )
+            self.logger.info(f"Starting download process for bucket: {self.bucket_name}")
 
             # Get list of .webm files
             paginator = self.s3_client.get_paginator("list_objects_v2")
-
+            s3_files = []
             for page in paginator.paginate(Bucket=self.bucket_name):
                 for obj in page.get("Contents", []):
                     if obj["Key"].lower().endswith(".webm"):
-                        self.processing_queue.put(obj["Key"])
+                        s3_files.append(obj["Key"])
+                        # Only get 2 files at a time
+                        if len(s3_files) >= 2:
+                            break
+                if len(s3_files) >= 2:
+                    break
 
-            # Process files with ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=self.max_concurrent) as executor:
-                while (
-                    not self.processing_queue.empty() and not self.stop_event.is_set()
-                ):
-                    futures = []
-
-                    # Submit up to max_concurrent files
-                    while (
-                        len(futures) < self.max_concurrent
-                        and not self.processing_queue.empty()
-                    ):
-                        s3_key = self.processing_queue.get()
-                        local_path = self.download_file(s3_key)
-                        if local_path:
-                            futures.append(
-                                executor.submit(self.process_file, local_path)
-                            )
-
-                    # Wait for current batch to complete
-                    for future in futures:
-                        future.result()
+            # Download and process up to 2 files
+            for s3_key in s3_files:
+                local_path = self.download_file(s3_key)
+                if local_path:
+                    self.active_downloads += 1
+                    self.process_file(local_path)
 
         except Exception as e:
             self.error_logger.error(f"Pipeline error: {str(e)}")
@@ -164,3 +137,4 @@ if __name__ == "__main__":
     )
 
     pipeline.start_processing()
+

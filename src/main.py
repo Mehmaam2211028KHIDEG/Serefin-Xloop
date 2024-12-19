@@ -1,9 +1,10 @@
 import logging
 import time
 from pathlib import Path
-
 from aws_bucket import S3ProcessingPipeline
 from transcription import AudioTranscriber
+from config import TranscriptionConfig
+import threading
 
 
 def setup_logging():
@@ -32,43 +33,80 @@ def ensure_directories():
 
 
 def process_files(
-    downloader: S3ProcessingPipeline,
     transcriber: AudioTranscriber,
     local_dir: str,
     logger: logging.Logger,
+    pipeline: S3ProcessingPipeline,
+    stats: dict  # Pass stats as a parameter
 ):
     """Process files with download and transcription"""
-    while True:
-        try:
-            # Start download manager
-            download_thread = downloader.start_downloading(local_dir)
+    print(f"\n🔍 Monitoring directory: {Path(local_dir).resolve()}\n")
+    
+    stats_logger = setup_stats_logger()
+    stats_logger.info("=== Starting New Processing Session ===")
+    
+    try:
+        output_dir = Path(local_dir).resolve()
+        files = list(output_dir.rglob("*.webm"))
+        
+        if files:
+            print(f"\n📁 Found {len(files)} files to process")
+            
+            for file_path in files:
+                stats['total_processed'] += 1
+                s3_key = str(file_path.relative_to(output_dir))
+                
+                result = transcriber.transcribe_audio(file_path)
+                if result:
+                    transcriber._save_transcription(file_path, result)
+                    stats['successful'] += 1
+                    
+                  
+                    
+                    # # Local cleanup
+                    # file_path.unlink()
+                    
+                    # Log success with stats
+                    stats_msg = (
+                        f"SUCCESS - Total: {stats['total_processed']}, "
+                        f"Success: {stats['successful']}, "
+                        f"Failed: {stats['failed']}"
+                    )
+                    stats_logger.info(stats_msg)
+                    print(f"\n📊 {stats_msg}")
+                    print(f"✅ Processed and removed: {s3_key}")
+                else:
+                    stats['failed'] += 1
+                    # Log failure with stats
+                    stats_msg = (
+                        f"FAILED - Total: {stats['total_processed']}, "
+                        f"Success: {stats['successful']}, "
+                        f"Failed: {stats['failed']}"
+                    )
+                    stats_logger.info(stats_msg)
+                    print(f"\n📊 {stats_msg}")
+                    print(f"❌ Failed to process: {s3_key}")
+                
+    except Exception as e:
+        logger.error(f"Error in processing loop: {str(e)}")
 
-            # Monitor the output directory for files
-            output_dir = Path(local_dir)
-            while True:
-                # Process any existing files
-                for file_path in output_dir.glob("*.webm"):
-                    logger.info(f"Processing file: {file_path}")
 
-                    # Attempt transcription
-                    result = transcriber.transcribe_audio(file_path)
-                    if result:
-                        # Save transcription
-                        transcriber._save_transcription(file_path, result)
-                        logger.info(f"Successfully transcribed: {file_path}")
-
-                        # Remove the original file
-                        file_path.unlink()
-                        logger.info(f"Removed processed file: {file_path}")
-                    else:
-                        logger.error(f"Failed to transcribe: {file_path}")
-
-                # Brief pause before next check
-                time.sleep(5)
-
-        except Exception as e:
-            logger.error(f"Error in processing loop: {str(e)}")
-            time.sleep(60)  # Wait before retrying
+def setup_stats_logger():
+    """Setup statistics logger"""
+    stats_logger = logging.getLogger("transcription_stats")
+    stats_logger.setLevel(logging.INFO)
+    
+    if not stats_logger.handlers:
+        # Create logs directory if it doesn't exist
+        Path("logs").mkdir(exist_ok=True)
+        
+        # File handler for stats
+        fh = logging.FileHandler("logs/statistics.log")
+        formatter = logging.Formatter("%(asctime)s - %(message)s")
+        fh.setFormatter(formatter)
+        stats_logger.addHandler(fh)
+    
+    return stats_logger
 
 
 def main():
@@ -76,16 +114,43 @@ def main():
     logger.info("Starting the application")
 
     try:
-        # Ensure directories exist
         ensure_directories()
-
-        # Configuration
         bucket_name = "access-oap-prod-twilio-bucket"
         local_dir = "./output"
 
-        # Initialize and start pipeline
+        config = TranscriptionConfig()
+        transcriber = AudioTranscriber(config)
         pipeline = S3ProcessingPipeline(bucket_name, download_dir=local_dir)
-        pipeline.start_processing()
+        
+        # Initialize stats outside the loop to maintain counts
+        stats = {
+            'total_processed': 0,
+            'successful': 0,
+            'failed': 0
+        }
+        
+        last_processing_time = 0
+        processing_interval = 30  # seconds between processing batches
+        
+        while True:
+            current_time = time.time()
+            
+            # Check if enough time has passed since last processing
+            if current_time - last_processing_time >= processing_interval:
+                files_in_output = list(Path(local_dir).rglob("*.webm"))
+                files_count = len(files_in_output)
+                
+                if files_count < 5:  # Only download new files if we're running low
+                    logger.info("Initiating new downloads")
+                    pipeline.start_processing()
+                
+                if files_in_output:
+                    logger.info(f"Processing batch of {files_count} files")
+                    process_files(transcriber, local_dir, logger, pipeline, stats)
+                    last_processing_time = current_time
+                
+            # Short sleep to prevent CPU spinning
+            time.sleep(1)
 
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}")
@@ -94,3 +159,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

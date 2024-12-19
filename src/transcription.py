@@ -2,6 +2,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Optional, Union
+import json
 
 from transformers import pipeline
 from transformers.utils import is_flash_attn_2_available
@@ -18,16 +19,21 @@ class AudioTranscriber:
     def _setup_logging(self) -> logging.Logger:
         """Setup detailed logging configuration."""
         logger = logging.getLogger(__name__)
-        logger.setLevel(
-            logging.DEBUG
-        )  # Set to DEBUG to capture all levels of log messages
+        logger.setLevel(logging.DEBUG)
+        
         if not logger.handlers:
+            # File handler
             fh = logging.FileHandler("logs/transcription.log")
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-            fh.setFormatter(formatter)
+            fh_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            fh.setFormatter(fh_formatter)
             logger.addHandler(fh)
+            
+            # Console handler
+            ch = logging.StreamHandler()
+            ch_formatter = logging.Formatter("%(levelname)s - %(message)s")
+            ch.setFormatter(ch_formatter)
+            logger.addHandler(ch)
+
         return logger
 
     def _initialize_model(self):
@@ -56,21 +62,34 @@ class AudioTranscriber:
         if not self._validate_file(file_path):
             return None
 
-        start_time = time.time()
         try:
+            # Get just the folder structure for logging
+            try:
+                # Find 'output' in the path parts and get everything after it
+                path_parts = file_path.parts
+                output_index = path_parts.index('output')
+                relative_parts = path_parts[output_index + 1:]
+                folder_structure = "/".join(relative_parts[:-1])
+            except ValueError:
+                # If 'output' not found in path, use the last two directory names
+                folder_structure = "/".join(file_path.parts[-3:-1])
+            
+            self.logger.info(f"� Processing: {folder_structure}")
+            
             result = self.model(
                 str(file_path),
                 chunk_length_s=self.config.chunk_length,
                 batch_size=self.config.batch_size,
+                return_timestamps=True,
+ 
             )
-            transcription_time = time.time() - start_time
-            self.logger.info(
-                f"Transcribed {file_path.name} in {transcription_time:.2f} seconds"
-            )
-            return result["text"].strip()
+            
+            self.logger.info(f"✅ Completed: {folder_structure}")
+            return result
         except Exception as e:
-            self.logger.error(f"Error transcribing {file_path}: {str(e)}")
+            self.logger.error(f"❌ Error: {str(e)}")
             return None
+        
 
     def _validate_file(self, file_path: Path) -> bool:
         """Validate audio file."""
@@ -100,19 +119,33 @@ class AudioTranscriber:
                     self._save_transcription(file_path, result)
                     self.logger.info(f"Successfully processed: {file_path.name}")
 
-    def _save_transcription(self, audio_path: Path, text: str) -> None:
-        """Save transcription to file in a separate directory outside of src."""
+    def _save_transcription(self, audio_path: Path, result: dict) -> None:
+        """Save complete transcription output to JSON file."""
         try:
-            output_dir = Path("transcriptions_directory_path")
+            base_output_dir = Path(self.config.output_dir)
+            
+            # Get the parts of the path after 'output'
+            path_parts = audio_path.parts
+            output_index = path_parts.index('output')
+            relative_parts = path_parts[output_index + 1:]
+            
+            # Create the full output path maintaining directory structure
+            output_dir = base_output_dir.joinpath(*relative_parts[:-1])
             output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = output_dir / f"{audio_path.stem}.txt"
-            self.logger.info(f"Saving transcription to {output_path}")
-            output_path.write_text(text)
-
-            # Uncomment the following lines to enable deletion of the original .webm file after transcription
-            # if audio_path.exists():
-            #     audio_path.unlink()
-            #     self.logger.info(f"Deleted original audio file: {audio_path}")
+            
+            # Create two output files: one for JSON (full output) and one for text (just transcription)
+            json_path = output_dir / f"{audio_path.stem}.json"
+            text_path = output_dir / f"{audio_path.stem}.txt"
+            
+            # Save complete output as JSON
+            with json_path.open('w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+                
+            # Also save just the text for convenience
+            text_path.write_text(result.get('text', '').strip())
+            
+            self.logger.info(f"Saved full transcription to {json_path}")
+            self.logger.info(f"Saved text transcription to {text_path}")
 
         except Exception as e:
             self.logger.error(f"Error saving transcription: {str(e)}")
